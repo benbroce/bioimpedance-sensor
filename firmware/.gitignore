@@ -1,0 +1,5 @@
+# ignore VS Code setup files
+.vscode/
+
+# ignore all MicroPico IDE files
+.micropico
