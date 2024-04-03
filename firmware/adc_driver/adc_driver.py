@@ -34,51 +34,59 @@ import uctypes
 import rp_devices as devs
 
 class ADC_Driver:
-    def __init__(self):
-        ADC_CHAN = 0
+    # ADC Driver constructor
+    def __init__(self, adc_channel: int):
+        # set the GPIO pin on adc_channel to an analog input
+        ADC_CHAN = adc_channel # adc channel (0 to 2)
         ADC_PIN = 26 + ADC_CHAN
-
         self._adc = devs.ADC_DEVICE
         pin = devs.GPIO_PINS[ADC_PIN]
         pad = devs.PAD_PINS[ADC_PIN]
         pin.GPIO_CTRL_REG = devs.GPIO_FUNC_NULL
         pad.PAD_REG = 0
-
+        # clear the control & status registers (ADC, FIFO)
         self._adc.CS_REG = self._adc.FCS_REG = 0
+        # enable ADC, select channel for conversion
         self._adc.CS.EN = 1
         self._adc.CS.AINSEL = ADC_CHAN
 
-    def take_sample(self):
-        # Multiple ADC samples using DMA
+    def capture_samples(self, num_samples: int, sample_rate_hz: int):
+        # set parameters
         DMA_CHAN = 0
-        NSAMPLES = 10
-        RATE = 100000
+        NSAMPLES = num_samples
+        RATE = sample_rate_hz
         dma_chan = devs.DMA_CHANS[DMA_CHAN]
-        dma = devs.DMA_DEVICE
-
+        # enable ADC FIFO
         self._adc.FCS.EN = self._adc.FCS.DREQ_EN = 1
-        self._adc_buff = array.array('H', (0 for _ in range(NSAMPLES)))
+        # create a 16-bit buffer to hold the samples
+        adc_buff = array.array('H', (0 for _ in range(NSAMPLES)))
+        # set sample rate
         self._adc.DIV_REG = (48000000 // RATE - 1) << 8
         self._adc.FCS.THRESH = self._adc.FCS.OVER = self._adc.FCS.UNDER = 1
-
+        # configure DMA controller (source and dest addresses, sample count)
         dma_chan.READ_ADDR_REG = devs.ADC_FIFO_ADDR
         dma_chan.WRITE_ADDR_REG = uctypes.addressof(adc_buff)
         dma_chan.TRANS_COUNT_REG = NSAMPLES
-
+        # configure DMA destination to auto-increment
         dma_chan.CTRL_TRIG_REG = 0
         dma_chan.CTRL_TRIG.CHAIN_TO = DMA_CHAN
         dma_chan.CTRL_TRIG.INCR_WRITE = dma_chan.CTRL_TRIG.IRQ_QUIET = 1
+        # set DMA to expect request for 16-bit data from ADC
         dma_chan.CTRL_TRIG.TREQ_SEL = devs.DREQ_ADC
         dma_chan.CTRL_TRIG.DATA_SIZE = 1
+        # enable DMA
         dma_chan.CTRL_TRIG.EN = 1
-
+        # clear ADC FIFO
         while self._adc.FCS.LEVEL:
             x = self._adc.FIFO_REG
-            
+        # start ADC sampling
         self._adc.CS.START_MANY = 1
+        # continue sampling until RAM buffer is full (DMA transfer count reached, BUSY bit clear)
         while dma_chan.CTRL_TRIG.BUSY:
             time.sleep_ms(10)
+        # stop ADC sampling
         self._adc.CS.START_MANY = 0
+        # disable DMA
         dma_chan.CTRL_TRIG.EN = 0
-        vals = [("%1.3f" % (val*3.3/4096)) for val in adc_buff]
-        print(vals)
+        vals = [(val*3.3/4096) for val in adc_buff]
+        return vals
