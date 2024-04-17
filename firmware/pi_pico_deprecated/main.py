@@ -18,17 +18,12 @@
 
 """
 
-# TODO: Begin actual code structure
-# (These are just reference functions)
-
-from machine import Pin
-from machine import ADC
+from adc_driver.adc_driver import ADC_Driver
 from utime import sleep
 
-led = Pin('LED', Pin.OUT)
-analog_pin = ADC(28)
+adc = ADC_Driver(0)
 
 while True:
-	analog_value = analog_pin.read_u16()
-	led.value(not led.value())
+	samples = adc.capture_samples(50, 100000)
+	print(samples)
 	sleep(0.5)

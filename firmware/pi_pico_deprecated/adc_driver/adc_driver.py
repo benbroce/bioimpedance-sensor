@@ -50,7 +50,20 @@ class ADC_Driver:
         self._adc.CS.EN = 1
         self._adc.CS.AINSEL = ADC_CHAN
 
-    def capture_samples(self, num_samples: int, sample_rate_hz: int):
+    def _convert_sample_to_voltage(self, sample: float) -> float:
+        return (sample * 3.3 / 4096)
+
+    def capture_sample(self) -> float:
+        """
+        return: a float voltage
+        """
+        self._adc.CS.START_ONCE = 1
+        return self._adc.RESULT_REG
+        
+    def capture_samples(self, num_samples: int, sample_rate_hz: int) -> list[float]:
+        """
+        return: a list of float voltages captured at the given sample rate
+        """
         # set parameters
         DMA_CHAN = 0
         NSAMPLES = num_samples
@@ -88,5 +101,5 @@ class ADC_Driver:
         self._adc.CS.START_MANY = 0
         # disable DMA
         dma_chan.CTRL_TRIG.EN = 0
-        vals = [(val*3.3/4096) for val in adc_buff]
+        vals = [self._convert_sample_to_voltage(val) for val in adc_buff]
         return vals
