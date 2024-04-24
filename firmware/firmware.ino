@@ -4,21 +4,28 @@
 // Constants
 
 // body parameters
-#define SUBJECT_MASS_KG 97.5
-#define SUBJECT_HEIGHT_CM 289.6
+// #define SUBJECT_MASS_KG 97.5
+// #define SUBJECT_HEIGHT_CM 289.6
 // sampling and comms
 #define BAUD_RATE 9600
 #define NUM_SAMPLES_PER_CAPTURE 10
 #define PERIOD_BETWEEN_SAMPLES_MS 100
 #define PERIOD_BETWEEN_CAPTURES_MS 1000
 // voltage to impedance calibration constants
-#define ADC_TO_IMPEDANCE_GAIN 0.00488758553 // (5V / 1023 ADC max)
-#define ADC_TO_IMPEDANCE_OFFSET 0.0
+#define ADC_REF_VOLTAGE 5.0
+#define ADC_MAX_VAL 1023
+#define VOLTAGE_TO_IMPEDANCE_SQUARE_GAIN 879.0
+#define VOLTAGE_TO_IMPEDANCE_LINEAR_GAIN 1326.0
+#define VOLTAGE_TO_IMPEDANCE_OFFSET 639.0
 
 // Pin Defs
 
 #define SENSOR_PIN A0
 #define CAPTURE_BTN_PIN 3
+
+// Globals
+float SUBJECT_MASS_KG;
+float SUBJECT_HEIGHT_CM;
 
 // Functions
 
@@ -31,7 +38,10 @@ float samples_to_capture_avg(int (&samples)[NUM_SAMPLES_PER_CAPTURE]) {
 }
 
 float adc_to_impedance_ohms(float adc_val) {
-  return (ADC_TO_IMPEDANCE_GAIN * adc_val) + ADC_TO_IMPEDANCE_OFFSET;
+  float in_voltage = adc_val * (ADC_REF_VOLTAGE / ADC_MAX_VAL);
+  return VOLTAGE_TO_IMPEDANCE_OFFSET +
+         (VOLTAGE_TO_IMPEDANCE_LINEAR_GAIN * in_voltage) +
+         (VOLTAGE_TO_IMPEDANCE_SQUARE_GAIN * in_voltage * in_voltage);
 }
 
 // calculate Total Body Water (TBW) in kg from impedance,
@@ -42,6 +52,7 @@ float adc_to_impedance_ohms(float adc_val) {
 float calc_TBW_kg(float impedance_ohms, float mass_kg, float height_cm) {
   float TBW_kg = (0.59 * ((height_cm * height_cm) / impedance_ohms)) +
                  (0.065 * mass_kg) + 0.04;
+  return TBW_kg;
 }
 
 // calculate Fat Free Mass (FFM) in kg from TBW
@@ -63,7 +74,16 @@ void setup() {
   setPinModes();
   Serial.begin(BAUD_RATE);
   Serial.println("\n\nBioimpedance Sensor\nProgram the Device with Your Height "
-                 "and Weight\n");
+                 "and Weight, then Press the Button\n");
+  Serial.print("Subject Mass: ");
+  while (Serial.available() == 0)
+    ;
+  SUBJECT_MASS_KG = Serial.parseFloat();
+  Serial.print("Subject Height: ");
+  while (Serial.available() == 0)
+    ;
+  SUBJECT_HEIGHT_CM = Serial.parseFloat();
+  Serial.println();
 }
 
 void loop() {
@@ -85,13 +105,13 @@ void loop() {
     float lean_mass = calc_FFM_kg(total_body_water);
     float fatty_mass = calc_FM_kg(SUBJECT_MASS_KG, lean_mass);
     // display result
-    Serial.print("\nImpedance: ");
+    Serial.print("\nImpedance (Ohms): ");
     Serial.print(impedance);
-    Serial.print("\nTotal Body Water: ");
+    Serial.print("\nTotal Body Water (kg): ");
     Serial.print(total_body_water);
-    Serial.print("\nLean Mass: ");
+    Serial.print("\nLean Mass (kg): ");
     Serial.print(lean_mass);
-    Serial.print("\nFatty Mass: ");
+    Serial.print("\nFatty Mass (kg): ");
     Serial.print(fatty_mass);
     Serial.print("\n--------------------\n\n");
     delay(PERIOD_BETWEEN_CAPTURES_MS);
